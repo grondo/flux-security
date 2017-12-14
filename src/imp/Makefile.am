@@ -22,7 +22,9 @@ flux_imp_SOURCES = \
 	imp_log.c
 
 TESTS = \
-	test_imp_log.t
+	test_imp_log.t \
+	test_privsep.t
+
 check_PROGRAMS = \
 	$(TESTS)
 
@@ -40,3 +42,12 @@ test_imp_log_t_SOURCES =  \
 	imp_log.h
 
 test_imp_log_t_LDADD = $(test_ldadd)
+
+test_privsep_t_SOURCES = \
+	test/privsep.c \
+	privsep.c \
+	privsep.h \
+	imp_log.h \
+	imp_log.c
+
+test_privsep_t_LDADD = $(test_ldadd)
