@@ -47,6 +47,8 @@ test_privsep_t_SOURCES = \
 	test/privsep.c \
 	privsep.c \
 	privsep.h \
+	sudosim.h \
+	sudosim.c \
 	imp_log.h \
 	imp_log.c
 
