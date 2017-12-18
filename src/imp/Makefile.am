@@ -14,10 +14,16 @@ libexec_PROGRAMS = \
 	flux-imp
 
 flux_imp_LDADD = \
-	$(top_builddir)/src/libutil/libutil.la
+	$(top_builddir)/src/libutil/libutil.la \
+	$(top_builddir)/src/libtomlc99/libtomlc99.la \
+	$(JANSSON_LIBS)
 
 flux_imp_SOURCES = \
 	imp.c \
+	conf.c \
+	conf.h \
+	privsep.c \
+	privsep.h \
 	imp_log.h \
 	imp_log.c
 
