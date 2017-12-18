@@ -29,53 +29,75 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "imp_log.h"
+#include "privsep.h"
+#include "sudosim.h"
+#include "conf.h"
+
+#define IMP_CONFIG_PATH "imp.conf.d/*.toml"
+
+struct imp_state {
+    cf_t  *config;         /* IMP configuration */
+
+    uid_t ruid;            /* Real uid at program startup */
+    uid_t euid;            /* Effective uid at program startup */
+    uid_t rgid;            /* Real gid at program startup */
+    uid_t egid;            /* Effective gid at program startup */
+
+    privsep_t *privsep;    /* Privilege separation handle if running setuid */
+};
 
 /*  Static prototypes:
  */
-static void print_version (void);
-static int  log_stderr (int level, const char *str, void *arg);
+static void initialize_logging (void);
+static int  imp_state_init (struct imp_state *imp);
+//static void print_version (void);
 
-int main (int argc, char *argv[])
+bool imp_is_setuid (struct imp_state *imp)
 {
-    imp_openlog ();
+    return (imp->euid == 0 && imp->ruid > 0);
+}
 
-    if (imp_log_add ("stderr", IMP_LOG_INFO, log_stderr, NULL) < 0) {
-        fprintf (stderr, "flux-imp: Failed to initialize logging. Aborting.\n");
-        exit (1);
-    }
 
-    if (argc < 2)
-        imp_die (1, "IMP requires a command, master!");
+int main ()
+{
+    struct imp_state imp;
 
-    if (argc == 2 && strncmp (argv[1], "version", 7) == 0)
-        print_version ();
-
-    /*  Configuration:
+    /*  Initialize early logging to stderr only. Abort on failure.
      */
-    // Skip.
+    initialize_logging ();
 
-    /*  Audit subsystem initialization
-     */
-    // Skip.
+    if (imp_state_init (&imp) < 0)
+        imp_die (1, "Initialization error");
 
-    /*  Security architecture initialization
-     */
-    // Skip.
+    if (!(imp.config = imp_conf_load (IMP_CONFIG_PATH)))
+        imp_die (1, "Failed to load IMP configuration.");
 
-    /*  Parse command line and run subcommand
-     */
-    // Skip.
+    imp_conf_destroy (imp.config);
 
     imp_closelog ();
     exit (0);
 }
 
+static int imp_state_init (struct imp_state *imp)
+{
+    memset (imp, 0, sizeof (*imp));
+    imp->euid = geteuid ();
+    imp->ruid = getuid ();
+    imp->egid = getegid ();
+    imp->rgid = getgid ();
+    return (0);
+}
+
+#if 0
 static void print_version ()
 {
     printf ("flux-imp v%s\n", PACKAGE_VERSION);
 }
+#endif
 
 static int log_stderr (int level, const char *str,
                        void *arg __attribute__ ((unused)))
@@ -87,6 +109,14 @@ static int log_stderr (int level, const char *str,
     return (0);
 }
 
+static void initialize_logging (void)
+{
+    imp_openlog ();
+    if (imp_log_add ("stderr", IMP_LOG_INFO, log_stderr, NULL) < 0) {
+        fprintf (stderr, "flux-imp: Fatal: Failed to initialize logging.\n");
+        exit (1);
+    }
+}
 
 /*
  * vi: ts=4 sw=4 expandtab
