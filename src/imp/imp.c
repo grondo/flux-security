@@ -31,6 +31,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include "imp_log.h"
 #include "privsep.h"
@@ -50,10 +51,12 @@ struct imp_state {
     privsep_t *privsep;    /* Privilege separation handle if running setuid */
 };
 
+
 /*  Static prototypes:
  */
 static void initialize_logging (void);
 static int  imp_state_init (struct imp_state *imp);
+static cf_t * imp_config_get (imp_conf_t *conf, const char *key);
 //static void print_version (void);
 
 bool imp_is_setuid (struct imp_state *imp)
@@ -62,8 +65,9 @@ bool imp_is_setuid (struct imp_state *imp)
 }
 
 
-int main ()
+int main (int argc, char *argv[])
 {
+    cf_t *cf;
     struct imp_state imp;
 
     /*  Initialize early logging to stderr only. Abort on failure.
@@ -76,10 +80,59 @@ int main ()
     if (!(imp.config = imp_conf_load (IMP_CONFIG_PATH)))
         imp_die (1, "Failed to load IMP configuration.");
 
+    if (argc >= 2) {
+        const char *key = argv[1];
+        time_t t;
+        if (!(cf = imp_config_get (imp.config, key)))
+            imp_die (1, "%s: %s", key, strerror (errno));
+        switch (cf_typeof (cf)) {
+            case CF_INT64:
+                printf ("%s = %ju\n", key, cf_int64 (cf));
+                break;
+            case CF_DOUBLE:
+                printf ("%s = %f\n", key, cf_double (cf));
+                break;
+            case CF_BOOL:
+                printf ("%s = %s\n", key, cf_bool (cf) ? "true":"false");
+                break;
+            case CF_STRING:
+                printf ("%s = %s\n", key, cf_string (cf));
+                break;
+            case CF_TIMESTAMP:
+                t = cf_timestamp (cf);
+                printf ("%s = %s\n", key, ctime (&t));
+                break;
+            case CF_TABLE:
+                printf ("%s = <table>\n", key);
+                break;
+            case CF_ARRAY:
+                printf ("%s = <array>\n", key);
+                break;
+            default:
+                printf ("Unknown key type for %s", key);
+                break;
+        }
+    }
+
     imp_conf_destroy (imp.config);
 
     imp_closelog ();
     exit (0);
+}
+
+static cf_t * imp_config_get (imp_conf_t *conf, const char *key)
+{
+    char *s, *cpy = strdup (key);
+    cf_t *cf = imp_conf_cf (conf);
+    s = strtok (cpy, ".");
+    while (s) {
+        if (!(cf = cf_get_in (cf, s)))
+            goto out;
+        s = strtok (NULL, ".");
+    }
+out:
+    free (cpy);
+    return (cf);
 }
 
 static int imp_state_init (struct imp_state *imp)

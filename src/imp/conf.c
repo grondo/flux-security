@@ -57,62 +57,10 @@ void imp_conf_destroy (imp_conf_t *conf)
     free (conf);
 }
 
-static int imp_conf_update (imp_conf_t *conf, const char *filename)
-{
-    struct cf_error error;
-
-    /*  XXX: sanity check file access permissions before reading it
-     *       into config.
-     */
-    if (cf_update_file (conf->cf, filename, &error)) {
-        imp_warn ("%s: %d: %s", filename, error.lineno, error.errbuf);
-        return (-1);
-    }
-
-    return (0);
-}
-
-static int errf (const char *msg, int errnum)
-{
-    imp_warn ("glob: %s: %s", msg, strerror (errnum));
-    return (0);
-}
-
-static int imp_conf_update_glob (imp_conf_t *conf, const char *pattern)
-{
-    int count = -1;
-    glob_t gl;
-    size_t i;
-
-    int rc = glob (pattern, GLOB_ERR, errf, &gl);
-    switch (rc) {
-        case 0:
-            count = 0;
-            for (i = 0; i < gl.gl_pathc; i++) {
-                if (imp_conf_update (conf, gl.gl_pathv[i]) == 0)
-                    count++;
-            }
-            break;
-        case GLOB_NOMATCH:
-            break;
-        case GLOB_NOSPACE:
-            imp_die (1, "imp_conf_update: Out of memory");
-        case GLOB_ABORTED:
-            imp_warn ("imp_conf_update: cannot read dir %s", pattern);
-            break;
-        default:
-            imp_warn ("imp_conf_update: unknown glob(3) return code = %d", rc);
-            break;
-
-    }
-    globfree (&gl);
-    return (count);
-}
-
 imp_conf_t * imp_conf_load (const char *pattern)
 {
     imp_conf_t *conf = imp_conf_create ();
-    if (conf && pattern && imp_conf_update_glob (conf, pattern) < 0) {
+    if (conf && pattern && cf_update_glob (conf->cf, pattern, NULL) < 0) {
         imp_conf_destroy (conf);
         return (NULL);
     }
