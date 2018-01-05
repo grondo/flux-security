@@ -109,6 +109,8 @@ int cf_update_glob (cf_t *cf, const char *pattern, struct cf_error *error);
 int cf_check (const cf_t *cf, const struct cf_option opts[], int flags,
               struct cf_error *error);
 
+void cf_fputs (cf_t *cf, FILE *fp);
+
 #endif /* !_UTIL_CF_H */
 
 /*

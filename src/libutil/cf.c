@@ -411,6 +411,115 @@ int cf_check (const cf_t *cf,
     return 0;
 }
 
+static void cf_dump_table (const char *name, cf_t *cf, FILE *fp);
+static void cf_dump_array (const char *parent, const char *key, cf_t *cf,
+                           FILE *fp);
+
+/*  Dump cf item `key`/`val` in table named `parent` (or NULL if no parent)
+ *   to file stream `fp`. May be called recursively depending on `val`'s type.
+ */
+static void cf_dump_item (const char *parent,
+                          const char *key, cf_t *val, FILE *fp)
+{
+    time_t t;
+    const char *eq = key ? " = " : "";
+    key = key ? key : "";
+
+    switch (cf_typeof (val)) {
+           case CF_INT64:
+                fprintf (fp, "%s%s%ju", key, eq, (uintmax_t) cf_int64 (val));
+                break;
+            case CF_DOUBLE:
+                fprintf (fp, "%s%s%g", key, eq, cf_double (val));
+                break;
+            case CF_BOOL:
+                fprintf (fp, "%s%s%s", key, eq, cf_bool (val) ? "true":"false");
+                break;
+            case CF_STRING:
+                fprintf (fp, "%s%s\"%s\"", key, eq, cf_string (val));
+                break;
+            case CF_TIMESTAMP:
+                t = cf_timestamp (val);
+                fprintf (fp, "%s%s%s", key, eq, ctime (&t));
+                break;
+            case CF_TABLE:
+                if (parent && (strlen (parent) > 0))
+                    fprintf (fp, "\n[%s.%s]\n", parent, key);
+                else if (key && (strlen (key) > 0))
+                    fprintf (fp, "\n[%s]\n", key);
+                cf_dump_table (key, val, fp);
+                break;
+            case CF_ARRAY:
+                cf_dump_array (parent, key, val, fp);
+                break;
+            case CF_UNKNOWN:
+                fprintf (fp, "%s%sUnknown\n", key, eq);
+                break;
+    }
+
+}
+
+static void cf_dump_table (const char *name, cf_t *cf, FILE *fp)
+{
+    const char *key;
+    cf_t *val;
+    /* First dump values, then arrays, then sub tables */
+    json_object_foreach (cf, key, val) {
+        if (cf_typeof (val) != CF_TABLE && cf_typeof (val) != CF_ARRAY) {
+            cf_dump_item (name, key, val, fp);
+            fprintf (fp, "\n");
+        }
+    }
+    json_object_foreach (cf, key, val) {
+        if (cf_typeof (val) == CF_ARRAY)
+            cf_dump_item (name, key, val, fp);
+    }
+    json_object_foreach (cf, key, val) {
+        if (cf_typeof (val) == CF_TABLE)
+            cf_dump_item (name, key, val, fp);
+    }
+}
+
+static void cf_dump_array (const char *parent, const char *key, cf_t *cf,
+                           FILE *fp)
+{
+    int i;
+    int size = cf_array_size (cf);
+    enum cf_type type = cf_typeof (cf_get_at (cf, 0));
+
+    if (type != CF_TABLE) {
+        if (key && (strlen (key) > 0))
+            fprintf (fp, "%s = ", key);
+        fprintf (fp, " [ ");
+    }
+
+    for (i = 0; i < size; i++) {
+        if (type == CF_TABLE) {
+            if (parent && (strlen (parent) > 0))
+                fprintf (fp, "\n[[%s.%s]]\n", parent, key);
+            else
+                fprintf (fp, "\n[[%s]]\n", key);
+            cf_dump_table (key, cf_get_at (cf, i), fp);
+        }
+        else {
+            cf_dump_item (NULL, NULL, cf_get_at (cf, i), fp);
+            if (i < size - 1)
+                fprintf (fp, ", ");
+        }
+    }
+
+    if (type != CF_TABLE)
+        fprintf (fp, " ]");
+    if (key && strlen (key) > 0)
+        fprintf (fp, "\n");
+
+}
+
+void cf_fputs (cf_t *cf, FILE *fp)
+{
+    cf_dump_item (NULL, NULL, cf, fp);
+}
+
 /*
  * vi:tabstop=4 shiftwidth=4 expandtab
  */
