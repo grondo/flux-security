@@ -33,9 +33,9 @@ imp_conf_t *imp_conf_load (const char *path);
 
 void imp_conf_destroy (imp_conf_t *conf);
 
-cf_t *imp_conf_cf (imp_conf_t *conf);
+const cf_t *imp_conf_cf (imp_conf_t *conf);
 
-cf_t *imp_conf_get_table (imp_conf_t *conf, const char *key);
+const cf_t *imp_conf_get_table (imp_conf_t *conf, const char *key);
 
 #endif /* !HAVE_IMPCONF_H */
 /*

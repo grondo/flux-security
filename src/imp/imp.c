@@ -64,7 +64,7 @@ static bool imp_is_setuid ();
 static bool imp_is_privileged ();
 static void initialize_logging (void);
 static int  imp_state_init (struct imp_state *imp, int argc, char **argv);
-static cf_t * imp_config_get (imp_conf_t *conf, const char *key);
+static const cf_t * imp_config_get (imp_conf_t *conf, const char *key);
 static void initialize_sudo_support (imp_conf_t *conf);
 
 static void imp_child (privsep_t *ps, void *arg);
@@ -120,7 +120,7 @@ int main (int argc, char *argv[])
  */
 static void initialize_sudo_support (imp_conf_t *conf)
 {
-    cf_t *cf;
+    const cf_t *cf;
     if (sudo_is_active ()) {
         if (!(cf = imp_config_get (conf, "allow-sudo")) || !cf_bool (cf))
             imp_die (1, "sudo support not enabled");
@@ -129,10 +129,10 @@ static void initialize_sudo_support (imp_conf_t *conf)
     }
 }
 
-static cf_t * imp_config_get (imp_conf_t *conf, const char *key)
+static const cf_t * imp_config_get (imp_conf_t *conf, const char *key)
 {
     char *s, *cpy = strdup (key);
-    cf_t *cf = imp_conf_cf (conf);
+    const cf_t *cf = imp_conf_cf (conf);
     s = strtok (cpy, ".");
     while (s) {
         if (!(cf = cf_get_in (cf, s)))

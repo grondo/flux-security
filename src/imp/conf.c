@@ -67,7 +67,7 @@ imp_conf_t * imp_conf_load (const char *pattern)
     return (conf);
 }
 
-cf_t * imp_conf_get_table (imp_conf_t *conf, const char *key)
+const cf_t * imp_conf_get_table (imp_conf_t *conf, const char *key)
 {
     if (!key)
         return (conf->cf);
@@ -76,7 +76,7 @@ cf_t * imp_conf_get_table (imp_conf_t *conf, const char *key)
     return (NULL);
 }
 
-cf_t * imp_conf_cf (imp_conf_t *conf)
+const cf_t * imp_conf_cf (imp_conf_t *conf)
 {
     return (conf->cf);
 }
