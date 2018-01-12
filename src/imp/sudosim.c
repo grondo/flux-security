@@ -36,6 +36,18 @@
 #include "imp_log.h"
 #include "sudosim.h"
 
+const char * sudo_user_name (void)
+{
+    if (getuid() == 0)
+        return (getenv ("SUDO_USER"));
+    return (NULL);
+}
+
+bool sudo_is_active (void)
+{
+    return (sudo_user_name() != NULL);
+}
+
 int sudo_simulate_setuid (void)
 {
     const char *user = NULL;
@@ -44,7 +56,7 @@ int sudo_simulate_setuid (void)
      *   process was run under sudo, or someone with privileges wants to
      *   simulate running under sudo.
      */
-    if ((getuid() == 0) && (user = getenv ("SUDO_USER"))) {
+    if ((user = sudo_user_name ())) {
         struct passwd *pwd = getpwnam (user);
 
         /*  Fail in the abnormal condition that SUDO_USER is not found.
