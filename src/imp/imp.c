@@ -32,16 +32,22 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "imp_log.h"
 #include "privsep.h"
 #include "sudosim.h"
+#include "impcmd.h"
 #include "conf.h"
 
 #define IMP_CONFIG_PATH "imp.conf.d/*.toml"
 
 struct imp_state {
+    int argc;              /* Cmdline arguments from main() */
+    char **argv;
+
     cf_t  *config;         /* IMP configuration */
+    privsep_t *ps;         /* Privilege separation handle */
 
     uid_t ruid;            /* Real uid at program startup */
     uid_t euid;            /* Effective uid at program startup */
@@ -54,70 +60,73 @@ struct imp_state {
 
 /*  Static prototypes:
  */
+static bool imp_is_setuid ();
+static bool imp_is_privileged ();
 static void initialize_logging (void);
-static int  imp_state_init (struct imp_state *imp);
+static int  imp_state_init (struct imp_state *imp, int argc, char **argv);
 static cf_t * imp_config_get (imp_conf_t *conf, const char *key);
+static void initialize_sudo_support (imp_conf_t *conf);
+
+static void imp_child (privsep_t *ps, void *arg);
+static void imp_parent (struct imp_state *imp);
+
 //static void print_version (void);
-
-bool imp_is_setuid (struct imp_state *imp)
-{
-    return (imp->euid == 0 && imp->ruid > 0);
-}
-
-
 int main (int argc, char *argv[])
 {
-    cf_t *cf;
     struct imp_state imp;
 
     /*  Initialize early logging to stderr only. Abort on failure.
      */
     initialize_logging ();
 
-    if (imp_state_init (&imp) < 0)
+    if (imp_state_init (&imp, argc, argv) < 0)
         imp_die (1, "Initialization error");
 
     if (!(imp.config = imp_conf_load (IMP_CONFIG_PATH)))
         imp_die (1, "Failed to load IMP configuration.");
 
-    if (argc >= 2) {
-        const char *key = argv[1];
-        time_t t;
-        if (!(cf = imp_config_get (imp.config, key)))
-            imp_die (1, "%s: %s", key, strerror (errno));
-        switch (cf_typeof (cf)) {
-            case CF_INT64:
-                printf ("%s = %ju\n", key, cf_int64 (cf));
-                break;
-            case CF_DOUBLE:
-                printf ("%s = %f\n", key, cf_double (cf));
-                break;
-            case CF_BOOL:
-                printf ("%s = %s\n", key, cf_bool (cf) ? "true":"false");
-                break;
-            case CF_STRING:
-                printf ("%s = %s\n", key, cf_string (cf));
-                break;
-            case CF_TIMESTAMP:
-                t = cf_timestamp (cf);
-                printf ("%s = %s\n", key, ctime (&t));
-                break;
-            case CF_TABLE:
-                printf ("%s = <table>\n", key);
-                break;
-            case CF_ARRAY:
-                printf ("%s = <array>\n", key);
-                break;
-            default:
-                printf ("Unknown key type for %s", key);
-                break;
-        }
+    if (imp_is_privileged ()) {
+
+        /*  Simulate setuid under sudo if configured */
+        initialize_sudo_support (imp.config);
+
+        if (!imp_is_setuid ())
+            imp_die (1, "Refusing to run as root");
+
+        /*
+         *  Initialize privilege separation (required for now)
+         */
+        if (!(imp.ps = privsep_init (imp_child, &imp)))
+            imp_die (1, "Privilege separation initialization failed");
+        imp_parent (&imp);
+
+        if (privsep_destroy (imp.ps) < 0)
+            imp_warn ("privsep_destroy: %s", strerror (errno));
+    }
+    else {
+        /*  We can only run unprivileged */
+        imp_child (NULL, &imp);
     }
 
     imp_conf_destroy (imp.config);
-
     imp_closelog ();
     exit (0);
+}
+
+/*  Simulate setuid installation when run under sudo if "allow-sudo" is
+ *   set to true in configuration. If `allow-sudo` is not set and the
+ *   process appears to be run under sudo, or the sudo simulate call fails
+ *   then this is a fatal error.
+ */
+static void initialize_sudo_support (imp_conf_t *conf)
+{
+    cf_t *cf;
+    if (sudo_is_active ()) {
+        if (!(cf = imp_config_get (conf, "allow-sudo")) || !cf_bool (cf))
+            imp_die (1, "sudo support not enabled");
+        else if (sudo_simulate_setuid () < 0)
+            imp_die (1, "Failed to enable sudo support");
+    }
 }
 
 static cf_t * imp_config_get (imp_conf_t *conf, const char *key)
@@ -135,22 +144,27 @@ out:
     return (cf);
 }
 
-static int imp_state_init (struct imp_state *imp)
+static int imp_state_init (struct imp_state *imp, int argc, char *argv[])
 {
     memset (imp, 0, sizeof (*imp));
     imp->euid = geteuid ();
     imp->ruid = getuid ();
     imp->egid = getegid ();
     imp->rgid = getgid ();
+    imp->argc = argc;
+    imp->argv = argv;
     return (0);
 }
 
-#if 0
-static void print_version ()
+bool imp_is_privileged ()
 {
-    printf ("flux-imp v%s\n", PACKAGE_VERSION);
+    return (geteuid() == 0);
 }
-#endif
+
+bool imp_is_setuid ()
+{
+    return (geteuid() == 0 && getuid() > 0);
+}
 
 static int log_stderr (int level, const char *str,
                        void *arg __attribute__ ((unused)))
@@ -169,6 +183,33 @@ static void initialize_logging (void)
         fprintf (stderr, "flux-imp: Fatal: Failed to initialize logging.\n");
         exit (1);
     }
+}
+
+/*
+ *  IMP unprivileged child. Gather input and send request to parent.
+ */
+static void imp_child (privsep_t *ps, void *arg)
+{
+    struct imp_state *imp = arg;
+    imp_cmd_f cmd = NULL;
+    assert (imp != NULL);
+    ps = ps;
+
+    if (imp->argc <= 1)
+        imp_die (1, "command required");
+
+    if (!(cmd = imp_cmd_find_child (imp->argv[1])))
+        imp_die (1, "Unknown IMP command: %s", imp->argv[1]);
+
+    if (((*cmd) (imp)) < 0)
+        exit (1);
+}
+
+static void imp_parent (struct imp_state *imp)
+{
+    char buf [4096];
+    if (privsep_read (imp->ps, buf, sizeof (buf)) < 0)
+        imp_die (1, "privsep_read: %s", strerror (errno));
 }
 
 /*
