@@ -25,7 +25,12 @@ flux_imp_SOURCES = \
 	privsep.c \
 	privsep.h \
 	imp_log.h \
-	imp_log.c
+	imp_log.c \
+	impcmd.h \
+	impcmd.c \
+	sudosim.h \
+	sudosim.c \
+	version.c
 
 TESTS = \
 	test_imp_log.t \
