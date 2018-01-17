@@ -34,17 +34,12 @@
 
 /*  Static prototypes:
  */
+static void initialize_logging ();
 static void print_version (void);
-static int  log_stderr (int level, const char *str, void *arg);
 
 int main (int argc, char *argv[])
 {
-    imp_openlog ();
-
-    if (imp_log_add ("stderr", IMP_LOG_INFO, log_stderr, NULL) < 0) {
-        fprintf (stderr, "flux-imp: Failed to initialize logging. Aborting.\n");
-        exit (1);
-    }
+    initialize_logging ();
 
     if (argc < 2)
         imp_die (1, "IMP requires a command, master!");
@@ -85,6 +80,15 @@ static int log_stderr (int level, const char *str,
     else
         fprintf (stderr, "flux-imp: %s: %s\n", imp_log_strlevel (level), str);
     return (0);
+}
+
+static void initialize_logging (void)
+{
+    imp_openlog ();
+    if (imp_log_add ("stderr", IMP_LOG_INFO, log_stderr, NULL) < 0) {
+        fprintf (stderr, "flux-imp: Fatal: Failed to initialize logging.\n");
+        exit (1);
+    }
 }
 
 
