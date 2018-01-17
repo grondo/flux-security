@@ -23,7 +23,8 @@ flux_imp_SOURCES = \
 
 TESTS = \
 	test_imp_log.t \
-	test_privsep.t
+	test_privsep.t \
+	test_impcmd.t
 
 check_PROGRAMS = \
 	$(TESTS)
@@ -53,3 +54,11 @@ test_privsep_t_SOURCES = \
 	imp_log.c
 
 test_privsep_t_LDADD = $(test_ldadd)
+
+test_impcmd_t_SOURCES =  \
+	test/impcmd.c \
+	version.c \
+	impcmd.c \
+	impcmd.h
+
+test_impcmd_t_LDADD = $(test_ldadd)
