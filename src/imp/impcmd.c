@@ -27,6 +27,8 @@
 
 #include "impcmd.h"
 
+extern int imp_cmd_version (struct imp_state *imp);
+
 struct impcmd {
     const char *name;
     imp_cmd_f child_fn;
@@ -40,6 +42,8 @@ struct impcmd {
  *
  */
 static struct impcmd impcmds[] = {
+	{ "version",
+	  imp_cmd_version, NULL },
 	{ NULL, NULL, NULL}
 };
 
