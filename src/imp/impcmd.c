@@ -70,4 +70,5 @@ imp_cmd_f imp_cmd_find_parent (const char *name)
     return (NULL);
 }
 
-/* vi: ts=4 sw=4 expandtab */
+/* vi: ts=4 sw=4 expandtab
+ */
