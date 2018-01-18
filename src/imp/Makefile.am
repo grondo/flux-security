@@ -14,12 +14,22 @@ libexec_PROGRAMS = \
 	flux-imp
 
 flux_imp_LDADD = \
-	$(top_builddir)/src/libutil/libutil.la
+	$(top_builddir)/src/libutil/libutil.la \
+	$(top_builddir)/src/libtomlc99/libtomlc99.la
 
 flux_imp_SOURCES = \
 	imp.c \
 	imp_log.h \
-	imp_log.c
+	imp_log.c \
+	testconfig.c
+
+testconfig.c: $(top_builddir)/config/config.h
+	@(confdir=`cd $(srcdir) && pwd`/imp.conf.d; \
+	  echo "const char *imp_config_pattern = \"$$confdir/*.toml\";" \
+	 )> testconfig.c
+
+MOSTLYCLEANFILES = \
+	testconfig.c
 
 TESTS = \
 	test_imp_log.t \
