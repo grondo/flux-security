@@ -80,6 +80,7 @@ int main (int argc, char *argv[])
      */
     // Skip.
 
+    imp_conf_destroy (imp.config);
     imp_closelog ();
     exit (0);
 }
