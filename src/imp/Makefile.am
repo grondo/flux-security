@@ -25,6 +25,8 @@ flux_imp_SOURCES = \
 	privsep.h \
 	impcmd.c \
 	impcmd.h \
+	sudosim.c \
+	sudosim.h \
 	version.c \
 	testconfig.c
 
