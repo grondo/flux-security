@@ -72,8 +72,8 @@ static int wait_for_parent (privsep_t *ps)
 
 void drop_privileges ()
 {
-    uid_t ruid, euid, suid;
-    gid_t rgid, egid, sgid;
+    uid_t ruid = -1, euid, suid;
+    gid_t rgid = -1, egid, sgid;
 
     if (  (getresuid (&ruid, &euid, &suid) < 0)
        || (getresgid (&rgid, &egid, &sgid) < 0))
