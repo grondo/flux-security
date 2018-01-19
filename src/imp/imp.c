@@ -37,6 +37,7 @@
 #include "imp_log.h"
 #include "privsep.h"
 #include "impcmd.h"
+#include "sudosim.h"
 
 extern const char *imp_config_pattern;
 
@@ -60,6 +61,7 @@ static int  imp_state_init (struct imp_state *imp, int argc, char **argv);
 static cf_t * imp_conf_load (const char *pattern);
 static bool imp_is_privileged ();
 static bool imp_is_setuid ();
+static void initialize_sudo_support ();
 
 static void imp_child (privsep_t *ps, void *arg);
 static void imp_parent (struct imp_state *imp);
@@ -85,6 +87,10 @@ int main (int argc, char *argv[])
     /*  Security architecture initialization
      */
     if (imp_is_privileged ()) {
+
+        /*  Simulate setuid under sudo(8) if configured */
+        initialize_sudo_support (imp.conf);
+
         if (!imp_is_setuid ())
             imp_die (1, "Refusing to run as root");
 
@@ -184,6 +190,22 @@ static bool imp_is_privileged ()
 static bool imp_is_setuid ()
 {
     return (geteuid() == 0 && getuid() > 0);
+}
+
+/*  Simulate setuid installation when run under sudo if "allow-sudo" is
+ *   set to true in configuration. If `allow-sudo` is not set and the
+ *   process appears to be run under sudo, or the sudo simulate call fails
+ *   then this is a fatal error.
+ */
+static void initialize_sudo_support (cf_t *conf)
+{
+    const cf_t *cf;
+    if (sudo_is_active ()) {
+        if (!(cf = cf_get_in (conf, "allow-sudo")) || !cf_bool (cf))
+            imp_die (1, "sudo support not enabled");
+        else if (sudo_simulate_setuid () < 0)
+            imp_die (1, "Failed to enable sudo support");
+    }
 }
 
 /*  IMP unprivileged child.
