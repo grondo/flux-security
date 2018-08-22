@@ -67,6 +67,6 @@ deploy:
     # Only deploy from first job in build matrix
     condition: $TRAVIS_JOB_NUMBER = $TRAVIS_BUILD_NUMBER.1
     tags: true
-    repo: flux-framework/flux-security
+    repo: grondo/flux-security
   api_key:
     secure: G0TyfiblXI0QXPCyU+Hq9OGaYGqli63qtCtfnaHABGagnfcDOhSjcNV626en89oOaHu+uoa8t3Izo7i7/1vfGTil3Sj1mko5/XpZwdF3wh7hySwWdAtrT59a1k3vLyMT79NWUDGHDhnQvh5b1lHYBBjSh95t6gPiMkhjB+x2pkLMfeR1D5Nhhy1o1ELoulz3+wl+MlNBJga1RDYAkT9nZFI9JDJgw+bDHzACHp2y+GMIWLrFsXgXW3s8NLY8EJPDKm1QTK+kqVnenJENx9/lqvwZ3GkCl1HBjrQSyITjMoX5sYp9ikTBJvAI937er8GzF86Fi76OoduV3yCHh93TnWhugqIhVPfcK9niGlVm3bEIDeugFszf9gp1ja9sQ3+WRe9Kind8ThFY/X3Wp9bN89meZMSs6t/r/78+ypURpkG2ZB0ACk2alIdx5d/d0wFNurjHIcczygVMnhMEEgQO72T6t13pTuKc8/MwvJUki9gdSIiTwqqx/xgQ7142Ou2cb8pTWmy4PKc3HjZfmnBCZpu1gosQ+DnZbSGTUENCKFrGqFzlj+INt2banctWPQ15qRAmZ3vnu7Ekc+yRvZue1IBQWQCsbwKPxlqqFVbIOB+sW2o5wx52dGVfpP1t5Slut3bnsyJepQjSnTiHNrVyemEwpBTHIVeIuMo/9u3MjgE=
