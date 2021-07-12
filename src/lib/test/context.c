@@ -14,6 +14,8 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "src/libtap/tap.h"
 
@@ -263,6 +265,7 @@ int main (int argc, char *argv[])
 {
     plan (NO_PLAN);
 
+    umask (022);
     conf_init ();
 
     test_basic ();

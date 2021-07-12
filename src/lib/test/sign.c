@@ -14,6 +14,8 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sodium.h>
 
 #include "src/libtap/tap.h"
@@ -554,6 +556,8 @@ int main (int argc, char *argv[])
 
     plan (NO_PLAN);
 
+    /*  Set umask to remove group writable bit */
+    umask (022);
     cfpath_init ();
 
     test_config ();
