@@ -39,7 +39,8 @@ RUN case $BASE_IMAGE in \
 RUN case $BASE_IMAGE in \
      bionic*) ;; \
      focal*) ;; \
-     centos*|fedora*) ;; \
+     centos*) ;; \
+     fedora*) dnf install -y libubsan ;; \
      *) (>&2 echo "Unknown BASE_IMAGE") ;; \
     esac
 
