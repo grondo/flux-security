@@ -7,7 +7,7 @@
 #
 #
 # option Defaults:
-PROJECT=flux-core
+PROJECT=flux-security
 BASE_DOCKER_REPO=fluxrm/testenv
 
 WORKDIR=/usr/src
@@ -122,7 +122,7 @@ CONFIGURE_ARGS="$@"
 #   unless in flux-core repo
 #
 BUILD_IMAGE=checks-builder:${IMAGE}
-if test "$PROJECT" = "flux-core"; then
+if test "$PROJECT" = "flux-core" -o "$PROJECT" = "flux-security"; then
     DOCKERFILE=$TOP/src/test/docker/checks
 else
     DOCKERFILE=$TOP/src/test/docker/$IMAGE
@@ -177,6 +177,7 @@ else
     docker run --rm \
         --workdir=$WORKDIR \
         --volume=$TOP:$WORKDIR \
+        -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
         ${PLATFORM} \
         $MOUNT_HOME_ARGS \
         -e CC \
