@@ -110,7 +110,7 @@ test_expect_success 'CA cannot verify revoked cert' '
 	test_must_fail $ca verify u
 '
 
-test_expect_success 'imp casign fails on /dev/zero input' '
+test_expect_success NO_ASAN 'imp casign fails on /dev/zero input' '
 	test_must_fail $flux_imp casign </dev/zero
 '
 
