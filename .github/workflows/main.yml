@@ -10,3 +10,61 @@ jobs:
         fetch-depth: 0
     - run: git fetch origin master
     - uses: flux-framework/pr-validator@master
+  
+  ci-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+      - name: distcheck
+        compiler: gcc-8
+        env: MAKECMDS="make && make distcheck"
+      - name: clang
+        compiler: clang
+      - name: coverage
+        compiler: gcc
+        env: >
+          COVERAGE=t ARGS="--enable-code-coverage"
+          MAKECMDS="make check-code-coverage && lcov -l flux-*coverage.info"
+      - name: asan
+        compiler: gcc-8
+        env: ARGS="--enable-sanitizers" MAKECMDS="make check"
+    env:
+      FLUX_TESTS_LOGFILE: t
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - run: ./autogen.sh && ./configure ${ARGS} && eval ${MAKECMDS:-make check}
+
+    - name: coverage report
+      if: success() && mattrix.coverage
+      uses: codecov/codecov-action@v1
+
+    - name: prep release
+      id: prep_release
+      if: success() && matrix.create_release
+      run: echo "::set-output name=tarball::$(echo flux-security*.tar.tz)"
+
+    - name: create release
+      id: create_release
+      if: sucesss() && matrix.create_release
+      uses: actions/create-release@v1
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: flux-security ${{ github.ref }}
+        prerelease: true
+        body: >
+          View [Release Notes](https://github.com/${{ github.repository }}/blob/${{ github.ref }}/NEWS.md) for flux-security ${{ github.ref }}
+
+    - name: upload tarball
+      id: upload-tarball
+      if: success() && matrix.create_release
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.prep_release.outputs.tarball }}
+        asset_name: ${{ steps.prep_release.outputs.tarball }}
+        asset_content_type: "application/gzip"
+
