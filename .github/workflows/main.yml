@@ -10,3 +10,35 @@ jobs:
         fetch-depth: 0
     - run: git fetch origin master
     - uses: flux-framework/pr-validator@master
+  
+  ci-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+      - compiler: gcc-8
+        env: MAKECMDS="make && make distcheck"
+      - compiler: clang
+      - compiler: gcc
+        env: >
+          COVERAGE=t ARGS="--enable-code-coverage"
+          MAKECMDS="make check-code-coverage && lcov -l flux-*coverage.info"
+      - compiler: gcc-8
+        env: ARGS="--enable-sanitizers" MAKECMDS="make check"
+    env:
+      FLUX_TESTS_LOGFILE: t
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - run: >
+      ./autogen.sh &&
+      ./configure ${ARGS}
+      eval ${MAKECMDS:-make check}
+
+    - name: coverage report
+      if: success() && mattrix.coverage
+      uses: codecov/codecov-action@v1
+
+
