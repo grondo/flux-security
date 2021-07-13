@@ -18,7 +18,7 @@ if munge </dev/null | unmunge >/dev/null; then
 	echo "System munge works"
 	export MUNGE_SOCKET=$(munged --help \
 	                      | sed -n '/-S, --socket/s/.*\[\(.*\)\]$/\1/p')
-elif munged --version; then
+elif munged --version && (munged --help | grep pid-file); then
 	test_set_prereq SIDEMUNGE
 	export MUNGED=munged  # needed by 03-munge.sh
 	export MUNGE_SOCKET   # set by 03-munge.sh, used below and xsign_munge
