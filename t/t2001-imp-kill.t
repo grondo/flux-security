@@ -88,7 +88,7 @@ test_expect_success SYSTEMD_CGROUP 'flux-imp kill: fails for nonexistent pid' '
 	EOF
 	for pid in `seq 10000 12000`; do
             kill -s 0 ${pid} >/dev/null 2>&1 || break
-        done
+        done &&
 	( export FLUX_IMP_CONFIG_PATTERN=${name}.toml &&
 	    test_must_fail $flux_imp kill 15 $pid >${name}.log 2>&1
 	) &&
@@ -104,7 +104,7 @@ test_expect_success SUDO,SYSTEMD_CGROUP 'flux-imp kill: fails for nonexistent pi
 	EOF
 	for pid in `seq 10000 12000`; do
             kill -s 0 ${pid} >/dev/null 2>&1 || break
-        done
+        done &&
 	test_must_fail $SUDO FLUX_IMP_CONFIG_PATTERN=${name}.toml \
 	    $flux_imp kill 15 $pid >${name}.log 2>&1 &&
 	test_debug "cat ${name}.log" &&
