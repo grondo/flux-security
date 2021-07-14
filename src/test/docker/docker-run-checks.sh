@@ -103,6 +103,8 @@ else
     DOCKER_BUILD="docker build"
 fi
 
+docker buildx
+
 # distcheck incompatible with some configure args
 if test "$DISTCHECK" = "t"; then
     test "$RECHECK" = "t" && die "--recheck not allowed with --distcheck"
