@@ -13,10 +13,10 @@ EXTRA_DIST = \
 
 # coverage
 CODE_COVERAGE_IGNORE_PATTERN = \
-        "/t/*" \
+        "*/t/*" \
 	"*_test.c" \
-	"test/*.c" \
-	"libtap/*" \
-	"/usr/*"
+	"*/test/*.c" \
+	"*/libtap/*" \
+	"/usr/include/*"
 CODE_COVERAGE_LCOV_OPTIONS =
 @CODE_COVERAGE_RULES@
