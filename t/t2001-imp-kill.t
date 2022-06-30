@@ -38,7 +38,7 @@ test_expect_success 'flux-imp kill: checks exec.allowed-users' '
 	test_debug "cat ${name}.log" &&
 	grep "kill command not allowed" ${name}.log && unset name
 '
-test_expect_success SUDO 'flux-imp kill: sudo: user must be in allowed-shells' '
+test_expect_success SUDO 'flux-imp kill: sudo: user must be in allowed-users' '
 	name=wrongusersudo &&
 	cat <<-EOF >${name}.toml &&
 	allow-sudo = true
@@ -61,7 +61,7 @@ test "$(stat -fc %T /sys/fs/cgroup 2>/dev/null)" = "cgroup2fs" \
      && test_set_prereq SYSTEMD_CGROUP
 
 test_expect_success NO_CHAIN_LINT,SYSTEMD_CGROUP 'flux-imp kill: works in unpriv mode' '
-	name=allowed-user
+	name=unpriv &&
 	cat <<-EOF >${name}.toml
 	allow-sudo = true
 	[exec]
@@ -74,7 +74,7 @@ test_expect_success NO_CHAIN_LINT,SYSTEMD_CGROUP 'flux-imp kill: works in unpriv
 	test_expect_code 143 wait $pid
 '
 test_expect_success NO_CHAIN_LINT,SYSTEMD_CGROUP,SUDO 'flux-imp kill: works with sudo' '
-	name=allowed-user
+	name=sudo &&
 	cat <<-EOF >${name}.toml
 	allow-sudo = true
 	[exec]
@@ -86,7 +86,7 @@ test_expect_success NO_CHAIN_LINT,SYSTEMD_CGROUP,SUDO 'flux-imp kill: works with
 	test_expect_code 143 wait $pid
 '
 test_expect_success SYSTEMD_CGROUP 'flux-imp kill: fails for nonexistent pid' '
-	name=allowed-user &&
+	name=pid-noexist &&
 	cat <<-EOF >${name}.toml &&
 	allow-sudo = true
 	[exec]
@@ -102,7 +102,7 @@ test_expect_success SYSTEMD_CGROUP 'flux-imp kill: fails for nonexistent pid' '
 	grep "No such file or directory"  ${name}.log
 '
 test_expect_success SUDO,SYSTEMD_CGROUP 'flux-imp kill: fails for nonexistent pid under sudo' '
-	name=allowed-user &&
+	name=noexist-pid-sudo &&
 	cat <<-EOF >${name}.toml &&
 	allow-sudo = true
 	[exec]
