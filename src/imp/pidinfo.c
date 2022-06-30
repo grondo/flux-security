@@ -85,6 +85,44 @@ static int cgroup_info_init (struct cgroup_info *cg)
     return -1;
 }
 
+
+/*  Store the command name from /proc/PID/comm into buffer 'buf' of size 'len'.
+ */
+static int pid_command (pid_t pid, char *buf, int len)
+{
+    int rc = -1;
+    FILE *fp = NULL;
+    int n;
+    size_t size = 0;
+    char *line = NULL;
+    char file [4096];
+
+    n = snprintf (file, sizeof(file), "/proc/%ju/comm", (uintmax_t) pid);
+    if ((n < 0) || (n >= (int) sizeof(file))
+        || !(fp = fopen (file, "r")))
+        return -1;
+    if ((n = getline (&line, &size, fp)) < 0)
+        goto out;
+    if ((n = strlen (line)) > len) {
+        errno = ENOSPC;
+        goto out;
+    }
+    /*
+     *  Remove trailing newline and copy command into destination buffer.
+     *   No need to check return code since size of destination was already
+     *   checked above.
+     */
+    if (line[n] == '\n')
+        line[n] = '\0';
+    (void) strlcpy (buf, line, size);
+
+    rc = 0;
+out:
+    free (line);
+    fclose (fp);
+    return rc;
+}
+
 /*
  *  Looks up the 'name=systemd'[*] subsystem relative cgroup path in
  *   /proc/PID/cgroups and prepends `cgroup_mount_dir` to get the
@@ -156,6 +194,64 @@ static uid_t pid_owner (pid_t pid)
     return path_owner (path);
 }
 
+static int parse_pid (const char *s, pid_t *ppid)
+{
+    int val = 0;
+    if (s == NULL || *s == '\0') {
+        errno = EINVAL;
+        return -1;
+    }
+    do {
+        int digit;
+
+        /* Stop at newline */
+        if (*s == '\n')
+            break;
+
+        /* Other non-numeric characters are an error */
+        if (*s < '0' || *s > '9')
+            return -1;
+
+        digit = *s++ - '0';
+        val = val * 10 + digit;
+    } while (*s);
+
+    if (val < 0)
+        return -1;
+
+    *ppid = (pid_t) val;
+    return 0;
+}
+
+static pid_t pid_ppid (pid_t pid)
+{
+    char path [128];
+    char *line = NULL;
+    const int len = sizeof (path);
+    size_t size = 0;
+    FILE *fp = NULL;
+    pid_t ppid = -1;
+
+    int n = snprintf (path, len, "/proc/%ju/status", (uintmax_t) pid);
+    if ((n < 0) || (n >= len) || !(fp = fopen (path, "r"))  )
+        return (pid_t) -1;
+
+    while ((n = getline (&line, &size, fp)) >= 0) {
+        if (strncmp (line, "PPid:", 5) == 0) {
+            char *p = line + 5;
+            while (isspace (*p))
+                ++p;
+            if (parse_pid (p, &ppid) < 0)
+                goto out;
+            break;
+        }
+    }
+out:
+    free (line);
+    fclose (fp);
+    return ppid;
+}
+
 void pid_info_destroy (struct pid_info *pi)
 {
     free (pi);
@@ -180,12 +276,103 @@ struct pid_info *pid_info_create (pid_t pid)
         goto err;
     if ((pi->cg_owner = path_owner (pi->cg_path)) == (uid_t) -1)
         goto err;
+    if (pid_command (pid, pi->command, sizeof (pi->command)) < 0)
+        goto err;
     return pi;
 err:
     pid_info_destroy (pi);
     return NULL;
 }
 
-/*
- * vi: ts=4 sw=4 expandtab
+int pid_kill_children_fallback (pid_t parent, int sig)
+{
+    int count = 0;
+    int rc = 0;
+    DIR *dirp = NULL;
+    struct dirent *dent;
+    pid_t pid;
+    pid_t ppid;
+
+    if (parent <= (pid_t) 0 || sig < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (!(dirp = opendir ("/proc")))
+        return -1;
+
+    while ((dent = readdir (dirp))) {
+        if (parse_pid (dent->d_name, &pid) < 0)
+            continue;
+        if ((ppid = pid_ppid (pid)) < 0) {
+            imp_warn ("Failed to get ppid of %d: %s",
+                      (int) pid,
+                      strerror (errno));
+            rc = -1;
+            continue;
+        }
+        if (ppid == parent && kill (pid, sig) < 0) {
+            imp_warn ("Failed to send signal %d to pid %d: %s",
+                      sig,
+                      (int) pid,
+                      strerror (errno));
+            rc = -1;
+            continue;
+        }
+        count++;
+    }
+    if (count == 0) {
+        imp_warn ("No children signaled for pid %d", (int) parent);
+        rc = -1;
+    }
+    closedir (dirp);
+    return rc;
+}
+
+int pid_kill_children (pid_t pid, int sig)
+{
+    int count = 0;
+    int rc = 0;
+    char path [4096];
+    FILE *fp;
+    unsigned long child;
+
+    if (pid <= (pid_t) 0 || sig < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    (void) snprintf (path, sizeof (path), "/proc/%ju", (uintmax_t) pid);
+    if (access (path, R_OK) < 0)
+        return -1;
+
+    (void) snprintf (path, sizeof (path),
+                    "/proc/%ju/task/%ju/children",
+                    (uintmax_t) pid,
+                    (uintmax_t) pid);
+
+    if (!(fp = fopen (path, "r"))) {
+        if (errno == ENOENT)
+            return pid_kill_children_fallback (pid, sig);
+        return -1;
+    }
+    while (fscanf (fp, " %lu", &child) == 1) {
+        if (kill ((pid_t) child, sig) < 0) {
+            imp_warn ("Failed to send signal %d to pid %lu",
+                      sig,
+                      child);
+            rc = -1;
+            continue;
+        }
+        count++;
+    }
+    if (count == 0) {
+        imp_warn ("No children signaled for pid %d", (int) pid);
+        rc = -1;
+    }
+    fclose (fp);
+    return rc;
+}
+
+/* vi: ts=4 sw=4 expandtab
  */

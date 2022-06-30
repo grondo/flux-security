@@ -176,5 +176,7 @@ test_passwd_t_LDADD = $(test_ldadd)
 test_pidinfo_t_SOURCES = \
 	test/pidinfo.c \
 	pidinfo.c \
-	pidinfo.h
+	pidinfo.h \
+	imp_log.c \
+	imp_log.h
 test_pidinfo_t_LDADD = $(test_ldadd)

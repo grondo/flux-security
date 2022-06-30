@@ -42,13 +42,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-#ifdef HAVE_LINUX_MAGIC_H
-#include <linux/magic.h>
-#endif
+#include <dirent.h>
+#include <ctype.h>
 
 #include <pwd.h>
 #include <signal.h>
@@ -98,7 +93,13 @@ static void check_and_kill_process (struct imp_state *imp, pid_t pid, int sig)
             (intmax_t) pid,
             (uintmax_t) p->cg_owner);
 
-    if (kill (pid, sig) < 0)
+    /*  If pid is owned by root and is a flux-imp process, then deliver
+     *   signal to child process instead (presumably a job shell)
+     */
+    if (p->pid_owner == 0
+        && strcmp (p->command, "flux-imp") == 0)
+        pid_kill_children (pid, sig);
+    else if (kill (pid, sig) < 0)
         imp_die (1, "kill: %jd sig=%ju: %s",
                     (intmax_t) pid,
                     (uintmax_t) sig,
