@@ -30,6 +30,17 @@ RUN case $BASE_IMAGE in \
      *) (>&2 echo "Unknown BASE_IMAGE") ;; \
     esac
 
+RUN cd /tmp \
+ && mkdir pam_wrapper \
+ && cd pam_wrapper \
+ && wget -O - https://ftp.samba.org/pub/cwrap/pam_wrapper-1.1.4.tar.gz \
+     | tar xvz --strip-components 1 \
+ && mkdir obj \
+ && cd obj \
+ && cmake -DCMAKE_INSTALL_PREFIX=/usr -DLIB_SUFFIX=64 .. \
+ && make \
+ && sudo make install
+
 # Install extra dependencies if necessary here.
 #
 # Do not forget to run `apt update` on Ubuntu/bionic.
