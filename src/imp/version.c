@@ -18,7 +18,13 @@
 int imp_cmd_version (struct imp_state *imp __attribute__ ((unused)),
                      struct kv *kv __attribute__ ((unused)))
 {
+    bool n = 0;
     printf ("flux-imp v%s\n", PACKAGE_VERSION);
+#if HAVE_PAM
+    n += printf ("%s+pam", n ? " " : "");
+#endif
+    if (n)
+        printf ("\n");
     return (0);
 }
 
