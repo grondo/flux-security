@@ -131,6 +131,11 @@ PKG_CHECK_MODULES([LIBUUID], [uuid], [], [])
 PKG_CHECK_MODULES([MUNGE], [munge], [], [])
 
 #
+#  Enable PAM Support?
+#
+X_AC_PAM
+
+#
 #  Other checks
 #
 AX_CODE_COVERAGE
