@@ -22,7 +22,8 @@ TESTSCRIPTS = \
 	t1003-sign-curve.t \
 	t2000-imp-exec.t \
 	t2001-imp-kill.t \
-	t2002-imp-run.t
+	t2002-imp-run.t \
+	t2003-imp-exec-pam.t
 
 TESTS = \
 	$(TESTSCRIPTS)
