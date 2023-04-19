@@ -43,6 +43,7 @@
 #include "privsep.h"
 #include "passwd.h"
 #include "user.h"
+#include "safe_popen.h"
 
 #if HAVE_PAM
 #include "pam.h"
@@ -369,8 +370,31 @@ static void imp_exec_put_kv (struct imp_exec *exec,
         imp_die (1, "exec: Failed to set job shell arguments");
 }
 
+/*  Read IMP input using a helper process
+ */
+static void imp_exec_init_helper (struct imp_exec *exec,
+                                  char *helper)
+{
+        int status;
+        struct safe_popen *sp;
+
+        if (!(sp = safe_popen (helper)))
+            imp_die (1, "exec: failed to invoke helper: %s", helper);
+
+        imp_exec_init_stream (exec, safe_popen_fp (sp));
+
+        if (safe_popen_wait (sp, &status) < 0
+            || status != 0)
+            imp_die (1, "exec: helper %s failed with status=0x%04x",
+                     helper,
+                     status);
+
+        safe_popen_destroy (sp);
+}
+
 int imp_exec_unprivileged (struct imp_state *imp, struct kv *kv)
 {
+    char *helper;
     struct imp_exec *exec = imp_exec_create (imp);
     if (!exec)
         imp_die (1, "exec: initialization failure");
@@ -379,8 +403,14 @@ int imp_exec_unprivileged (struct imp_state *imp, struct kv *kv)
         imp_die (1, "exec: user %s not in allowed-users list",
                     exec->imp_pwd->pw_name);
 
-    /* Read input from stdin, cmdline: */
-    imp_exec_init_stream (exec, stdin);
+    if ((helper = getenv ("FLUX_IMP_EXEC_HELPER"))) {
+        /* Read input from helper command */
+        imp_exec_init_helper (exec, helper);
+    }
+    else {
+        /* Read input from stdin, cmdline: */
+        imp_exec_init_stream (exec, stdin);
+    }
 
     /* XXX; Parse jobspec if necessary, disabled for now: */
     //if (!(jobspec = json_loads (spec, 0, &err)))
