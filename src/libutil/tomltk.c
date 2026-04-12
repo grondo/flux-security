@@ -44,6 +44,238 @@ static void errprintf (struct tomltk_error *error,
     errno = saved_errno;
 }
 
+/* Quick validation to reject inputs that cause libtomlc99 to hang.
+ * This is a fast pre-filter before calling the full parser.
+ *
+ * CONTEXT: libtomlc99 (https://github.com/cktan/tomlc99) is no longer
+ * actively maintained. AFL++ fuzzing discovered multiple inputs that cause
+ * the parser to enter infinite loops (21 unique hang inputs). Rather than
+ * fork and maintain libtomlc99 ourselves, we add pre-validation to reject
+ * problematic patterns before they reach the parser. This is a temporary
+ * mitigation until libtomlc99 can be replaced with a maintained alternative.
+ *
+ * The limits below are conservative values based on fuzzing results:
+ * - Inputs exceeding these limits triggered parser hangs
+ * - Legitimate flux-security configs are well below these thresholds
+ * - Values chosen to fail fast (~0.5ms) rather than hang indefinitely (5+ sec)
+ */
+static int validate_toml_syntax (const char *conf, int len,
+                                 struct tomltk_error *error)
+{
+    int bracket_depth = 0;
+    int max_depth = 0;
+    int square_count = 0;
+    char in_string = 0;  // 0 = not in string, '"' or '\'' = quote type that opened
+    int in_ml_double = 0;  // In """ multi-line string
+    int in_ml_single = 0;  // In ''' multi-line string
+    int escape_next = 0;
+    int in_array = 0;  // Track if we're inside an array value
+
+    /* MAX_NESTING: Limit bracket nesting depth.
+     * Fuzzing found that deeply nested arrays (e.g., [[[[[[...]]]]]])
+     * cause libtomlc99 to hang in recursive descent parsing. Set to 32
+     * based on fuzzing observations: legitimate configs use ≤3 levels,
+     * hangs occurred at 50+ levels. Value of 32 provides safety margin
+     * while preventing pathological inputs.
+     */
+    const int MAX_NESTING = 32;
+
+    /* MAX_LINES: Limit total input lines.
+     * Fuzzing found that extremely large inputs with certain patterns
+     * (embedded NULs, mismatched quotes, malformed arrays) cause the
+     * parser to hang in string processing loops. Set to 10,000 lines
+     * based on fuzzing observations: typical flux-security configs are
+     * 10-100 lines, hangs occurred with generated inputs >50K lines.
+     * Value of 10K provides generous headroom while preventing DoS via
+     * parser resource exhaustion.
+     */
+    const int MAX_LINES = 10000;
+
+    int line_count = 0;
+    int i;
+    int skip = 0;  // Track characters to skip (for multi-line delimiters)
+
+    for (i = 0; i < len; i++) {
+        char c = conf[i];
+
+        // Skip characters (used when consuming multi-char sequences)
+        if (skip > 0) {
+            skip--;
+            continue;
+        }
+
+        // Count newlines to detect excessive input
+        if (c == '\n') {
+            line_count++;
+            if (line_count > MAX_LINES) {
+                errprintf (error, NULL, -1,
+                          "Input too large (>%d lines)", MAX_LINES);
+                return -1;
+            }
+        }
+
+        /* Reject adjacent triple-quote sequences (6 consecutive quotes).
+         * Patterns like '''''' or """""" create ambiguous or zero-length
+         * multi-line strings that cause libtomlc99 to enter infinite loops.
+         * While technically valid TOML in some interpretations, these serve
+         * no legitimate purpose and consistently trigger parser hangs.
+         */
+        if (i + 5 < len) {
+            if ((conf[i] == '"' && conf[i+1] == '"' && conf[i+2] == '"' &&
+                 conf[i+3] == '"' && conf[i+4] == '"' && conf[i+5] == '"') ||
+                (conf[i] == '\'' && conf[i+1] == '\'' && conf[i+2] == '\'' &&
+                 conf[i+3] == '\'' && conf[i+4] == '\'' && conf[i+5] == '\'')) {
+                errprintf (error, NULL, -1,
+                          "Adjacent triple-quote sequences not allowed");
+                return -1;
+            }
+        }
+
+        // Check for multi-line string delimiters
+        if (i + 2 < len && !escape_next) {
+            if (conf[i] == '"' && conf[i+1] == '"' && conf[i+2] == '"') {
+                if (in_ml_double) {
+                    // Closing multi-line double-quote string
+                    in_ml_double = 0;
+                    skip = 2;  // Skip next 2 quotes
+                    continue;
+                } else if (!in_ml_single && !in_string) {
+                    // Opening multi-line double-quote string
+                    in_ml_double = 1;
+                    skip = 2;  // Skip next 2 quotes
+                    continue;
+                }
+            }
+            else if (conf[i] == '\'' && conf[i+1] == '\'' && conf[i+2] == '\'') {
+                if (in_ml_single) {
+                    // Closing multi-line single-quote string
+                    in_ml_single = 0;
+                    skip = 2;  // Skip next 2 quotes
+                    continue;
+                } else if (!in_ml_double && !in_string) {
+                    // Opening multi-line single-quote string
+                    in_ml_single = 1;
+                    skip = 2;  // Skip next 2 quotes
+                    continue;
+                }
+            }
+        }
+
+        // Inside multi-line strings, only look for the closing delimiter
+        if (in_ml_double || in_ml_single) {
+            continue;
+        }
+
+        /* Track regular string state (single " or ').
+         * TOML requires matching quote types: strings that start with "
+         * must end with ", and strings that start with ' must end with '.
+         * Mismatched quotes like 'string"] cause parser hangs.
+         */
+        if (!escape_next && (c == '"' || c == '\'')) {
+            if (in_string == 0) {
+                // Opening a new string
+                in_string = c;
+            } else if (in_string == c) {
+                // Closing string with matching quote type
+                in_string = 0;
+            }
+            // Else: wrong quote type, ignore it (it's part of the string content)
+            continue;
+        }
+        if (in_string) {
+            escape_next = (!escape_next && c == '\\');
+            continue;
+        }
+        escape_next = 0;
+
+        // Handle comments - skip to end of line
+        if (c == '#') {
+            // Comments inside array values cause hangs
+            if (in_array) {
+                errprintf (error, NULL, -1,
+                          "Comment character inside array value");
+                return -1;
+            }
+            // Skip rest of line by counting chars until newline
+            int j;
+            for (j = i + 1; j < len && conf[j] != '\n'; j++)
+                ;  // Just counting
+            skip = j - i - 1;  // Skip all chars until (but not including) newline
+            continue;
+        }
+
+        // Count brackets outside strings
+        if (c == '[') {
+            square_count++;
+            bracket_depth++;
+            if (bracket_depth > max_depth)
+                max_depth = bracket_depth;
+
+            // Detect array values (not table headers)
+            if (bracket_depth == 1 && !in_array) {
+                // Check if this is at start of line (ignoring whitespace)
+                // If so, it's likely a table header [section], not an array value
+                int j = i - 1;
+                int is_table = 1;
+                while (j >= 0 && conf[j] != '\n') {
+                    if (conf[j] != ' ' && conf[j] != '\t') {
+                        is_table = 0;
+                        break;
+                    }
+                    j--;
+                }
+                if (!is_table && i > 0) {
+                    in_array = 1;
+                }
+            }
+            else if (bracket_depth > 1 || in_array) {
+                in_array = 1;
+            }
+
+            // Reject excessive nesting (catches deeply nested arrays)
+            if (bracket_depth > MAX_NESTING) {
+                errprintf (error, NULL, -1,
+                          "Excessive bracket nesting depth (%d)",
+                          bracket_depth);
+                return -1;
+            }
+        }
+        else if (c == ']') {
+            square_count--;
+            bracket_depth--;
+
+            // When we close all brackets, we're out of any array
+            if (bracket_depth == 0) {
+                in_array = 0;
+            }
+
+            // Reject if more closing than opening brackets
+            if (square_count < 0) {
+                errprintf (error, NULL, -1, "Unbalanced brackets");
+                return -1;
+            }
+        }
+    }
+
+    // Reject if brackets don't balance
+    if (square_count != 0) {
+        errprintf (error, NULL, -1, "Unbalanced brackets");
+        return -1;
+    }
+
+    // Reject if multi-line strings aren't closed
+    if (in_ml_double) {
+        errprintf (error, NULL, -1, "Unterminated multi-line string (\"\"\")");
+        return -1;
+    }
+    if (in_ml_single) {
+        errprintf (error, NULL, -1, "Unterminated multi-line string (''')");
+        return -1;
+    }
+
+    return 0;
+}
+
 /* Given an error message response from toml_parse(), parse the
  * error message into line number and message, e.g.
  *   "line 42: bad key"
@@ -290,6 +522,15 @@ toml_table_t *tomltk_parse (const char *conf, int len,
 
     if (len < 0 || (!conf && len != 0)) {
         errprintf (error, NULL, -1, "invalid argument");
+        errno = EINVAL;
+        return NULL;
+    }
+    if (len > 0 && memchr (conf, '\0', len) != NULL) {
+        errprintf (error, NULL, -1, "Config contains embedded NUL byte");
+        errno = EINVAL;
+        return NULL;
+    }
+    if (len > 0 && validate_toml_syntax (conf, len, error) < 0) {
         errno = EINVAL;
         return NULL;
     }
