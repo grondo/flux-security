@@ -1,0 +1,136 @@
+# ClusterFuzzLite PR fuzzing with dual-mode fuzzers (AFL++ and libFuzzer)
+# Fuzzers now support both AFL++ persistent mode and libFuzzer entry points.
+# See .clusterfuzzlite/STATUS.md for implementation details.
+
+name: ClusterFuzzLite Fuzzing
+on:
+  workflow_dispatch:  # Allow manual triggering
+  pull_request:  # Run on all PRs
+  push:  # Run on all branch pushes
+
+permissions: read-all
+
+jobs:
+  fuzz-pull-request:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Test each fuzzer individually for better coverage reporting
+        sanitizer: [address]
+    steps:
+    - name: Build Fuzzers (${{ matrix.sanitizer }})
+      id: build
+      uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      with:
+        language: c
+        sanitizer: ${{ matrix.sanitizer }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Run Fuzzers (${{ matrix.sanitizer }})
+      id: run
+      uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        fuzz-seconds: 600  # 10 minutes total across all fuzzers
+        mode: code-change
+        sanitizer: ${{ matrix.sanitizer }}
+        # Parallel fuzzing distributes time across all fuzzers
+        parallel-fuzzing: true
+        # Minimize corpus to reduce storage
+        minimize-crashes: true
+
+    - name: Upload Crashes
+      if: failure() && steps.run.outcome == 'success'
+      uses: actions/upload-artifact@v4
+      with:
+        name: crashes-${{ matrix.sanitizer }}
+        path: ./out/artifacts
+        if-no-files-found: ignore
+
+    - name: Comment PR with Results
+      if: always() && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const sanitizer = '${{ matrix.sanitizer }}';
+          const status = '${{ steps.run.outcome }}';
+
+          let comment = `### ClusterFuzzLite PR Fuzzing Results (${sanitizer})\n\n`;
+
+          if (status === 'success') {
+            comment += '✅ **No crashes found** during 10-minute fuzzing session.\n\n';
+            comment += 'Fuzzers tested:\n';
+            comment += '- `fuzz_sign_unwrap` - Signature verification parser\n';
+            comment += '- `fuzz_sign_unwrap_noverify` - Fast parser (no crypto)\n';
+            comment += '- `fuzz_kv` - KV format parser (privsep)\n';
+            comment += '- `fuzz_cf` - TOML configuration parser\n';
+          } else {
+            comment += '❌ **Crashes detected** - see artifacts for details.\n\n';
+            comment += 'Review crash reports and fix before merging.\n';
+          }
+
+          // Check if we already commented
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(c =>
+            c.user.type === 'Bot' &&
+            c.body.includes('ClusterFuzzLite PR Fuzzing Results')
+          );
+
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+          }
+
+    - name: Report Results for Push Event
+      if: always() && github.event_name == 'push'
+      run: |
+        SANITIZER="${{ matrix.sanitizer }}"
+        STATUS="${{ steps.run.outcome }}"
+
+        echo "=========================================="
+        echo "ClusterFuzzLite Fuzzing Results"
+        echo "=========================================="
+        echo "Event: push to ${{ github.ref_name }}"
+        echo "Sanitizer: $SANITIZER"
+        echo "Status: $STATUS"
+        echo ""
+
+        if [ "$STATUS" = "success" ]; then
+          echo "✅ No crashes found during 10-minute fuzzing session"
+          echo ""
+          echo "Fuzzers tested:"
+          echo "  - fuzz_sign_unwrap (signature verification parser)"
+          echo "  - fuzz_sign_unwrap_noverify (fast parser, no crypto)"
+          echo "  - fuzz_kv (KV format parser for privsep)"
+          echo "  - fuzz_cf (TOML configuration parser)"
+          echo ""
+          echo "::notice::ClusterFuzzLite fuzzing passed - no crashes found"
+        else
+          echo "❌ Crashes detected - see artifacts for details"
+          echo ""
+          echo "::error::ClusterFuzzLite fuzzing failed - crashes found"
+        fi
+
+        echo ""
+        echo "View full results in the workflow artifacts above"

@@ -1,0 +1,37 @@
+# ClusterFuzzLite configuration for flux-security
+# See: https://google.github.io/clusterfuzzlite/
+
+language: c
+primary_contact: flux-security-maintainers@llnl.gov
+
+# Sanitizers to use in batch fuzzing
+# address: catches buffer overflows, use-after-free, etc.
+# undefined: catches undefined behavior (integer overflow, null deref, etc.)
+# memory: catches use of uninitialized memory
+sanitizers:
+  - address
+  - undefined
+  - memory
+
+# Fuzzing engines
+# libfuzzer: coverage-guided fuzzing (default, best for most cases)
+fuzzing_engines:
+  - libfuzzer
+
+# Main fuzzers (targets)
+# These are built by .clusterfuzzlite/build.sh
+main_fuzzers:
+  - fuzz_sign_unwrap
+  - fuzz_sign_unwrap_noverify
+  - fuzz_kv
+  - fuzz_cf
+
+# Architecture
+architectures:
+  - x86_64
+
+# Experimental options
+experimental: false
+
+# View restrictions (public repository)
+view_restrictions: none

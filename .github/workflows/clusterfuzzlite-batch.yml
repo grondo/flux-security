@@ -1,0 +1,119 @@
+# DISABLED: ClusterFuzzLite requires libFuzzer-style fuzzers, but our fuzzers
+# use AFL++ persistent mode. See .clusterfuzzlite/STATUS.md for details.
+# To enable, fuzzers need to be adapted to support both AFL++ and libFuzzer.
+
+name: ClusterFuzzLite Batch Fuzzing (DISABLED)
+on:
+  workflow_dispatch:  # Manual trigger only (disabled by default)
+  # Commented out automatic schedule until fuzzers are adapted:
+  # schedule:
+  #   - cron: '0 2 * * *'
+
+permissions: read-all
+
+jobs:
+  BatchFuzzing:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Test with different sanitizers to catch different bug classes
+        sanitizer: [address, undefined, memory]
+    steps:
+    - name: Build Fuzzers (${{ matrix.sanitizer }})
+      id: build
+      uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      with:
+        language: c
+        sanitizer: ${{ matrix.sanitizer }}
+
+    - name: Run Fuzzers (${{ matrix.sanitizer }})
+      id: run
+      uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      with:
+        fuzz-seconds: 21600  # 6 hours
+        mode: batch
+        sanitizer: ${{ matrix.sanitizer }}
+        parallel-fuzzing: true
+        minimize-crashes: true
+        # Store corpus for continuous fuzzing
+        storage-repo: https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        storage-repo-branch: clusterfuzzlite-corpus
+        storage-repo-branch-coverage: gh-pages
+
+    - name: Upload Crashes
+      if: failure() && steps.run.outcome == 'success'
+      uses: actions/upload-artifact@v4
+      with:
+        name: crashes-batch-${{ matrix.sanitizer }}
+        path: ./out/artifacts
+        if-no-files-found: ignore
+
+    - name: Create Issue on Crash
+      if: failure() && steps.run.outcome == 'success'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const sanitizer = '${{ matrix.sanitizer }}';
+          const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+          const title = `[Fuzzing] Crash detected in batch fuzzing (${sanitizer})`;
+          const body = `### Fuzzing Crash Report
+
+          **Sanitizer:** ${sanitizer}
+          **Run:** [View workflow run](${runUrl})
+          **Timestamp:** ${new Date().toISOString()}
+
+          Crashes were detected during the nightly batch fuzzing campaign. Please investigate:
+
+          1. Download crash artifacts from the workflow run
+          2. Reproduce crashes locally
+          3. Fix the bug and add regression test
+          4. Verify fix with fuzzing
+
+          **Affected Fuzzers:**
+          Check the artifacts to see which fuzzer(s) crashed.
+
+          **Priority:** High - memory corruption in security-critical code
+
+          ---
+          *This issue was automatically created by ClusterFuzzLite batch fuzzing.*
+          `;
+
+          // Check if issue already exists
+          const { data: issues } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            labels: 'fuzzing,bug',
+          });
+
+          const existingIssue = issues.find(i => i.title === title);
+
+          if (!existingIssue) {
+            // Create new issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['fuzzing', 'bug', 'security'],
+              assignees: [],  // Add default assignees if needed
+            });
+          } else {
+            // Update existing issue with new occurrence
+            const updateBody = `\n\n---\n**New occurrence:** ${new Date().toISOString()}\n[Workflow run](${runUrl})`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existingIssue.number,
+              body: updateBody
+            });
+          }
+
+    - name: Report Success
+      if: success()
+      run: |
+        echo "::notice::Batch fuzzing completed successfully (${matrix.sanitizer})"
+        echo "No crashes found during 6-hour fuzzing session"
