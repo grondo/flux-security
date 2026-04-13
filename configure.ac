@@ -64,16 +64,26 @@ AC_DEFINE([SANITIZERS_ENABLED], 1,
 AM_CONDITIONAL([SANITIZERS_ENABLED], [test "x$enable_sanitizers" != "xno" ])
 
 #
-#  If --enable-fuzzing, check that AFL compiler is being used
+#  If --enable-fuzzing, check that fuzzing compiler is being used
+#  Supports both AFL++ (afl-clang-fast) and libFuzzer (clang -fsanitize=fuzzer)
 #
-AC_MSG_CHECKING([whether to enable AFL fuzzing harnesses])
+AC_MSG_CHECKING([whether to enable fuzzing harnesses])
 AC_ARG_ENABLE([fuzzing],
-              AS_HELP_STRING([--enable-fuzzing], [Build AFL fuzzing harnesses]),
+              AS_HELP_STRING([--enable-fuzzing], [Build fuzzing harnesses (AFL++ or libFuzzer)]),
 [
 AC_MSG_RESULT($enableval)
+# Allow AFL compilers, or libFuzzer mode (LIB_FUZZING_ENGINE or -fsanitize=fuzzer)
 AS_CASE([$CC],
         [*afl-clang-fast*|*afl-gcc*|*afl-clang*], [],
-        [AC_MSG_ERROR([--enable-fuzzing requires CC to be an AFL compiler (afl-clang-fast, afl-gcc, etc.)])])
+        [*clang*], [
+            # For libFuzzer: check if LIB_FUZZING_ENGINE is set or -fsanitize=fuzzer in CFLAGS
+            AS_IF([test -n "$LIB_FUZZING_ENGINE"],
+                  [],
+                  [AS_CASE([$CFLAGS],
+                          [*-fsanitize=fuzzer*], [],
+                          [AC_MSG_ERROR([--enable-fuzzing with clang requires LIB_FUZZING_ENGINE or -fsanitize=fuzzer in CFLAGS])])])
+        ],
+        [AC_MSG_ERROR([--enable-fuzzing requires AFL compiler (afl-clang-fast) or clang with fuzzing support])])
 ],
 [AC_MSG_RESULT(no)])
 AM_CONDITIONAL([ENABLE_FUZZING], [test "x$enable_fuzzing" = "xyes"])

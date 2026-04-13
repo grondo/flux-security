@@ -10,12 +10,15 @@ AM_CFLAGS = \
 	$(MUNGE_CFLAGS) \
 	$(CODE_COVERAGE_CFLAGS)
 
+# LIB_FUZZING_ENGINE is set by ClusterFuzzLite/OSS-Fuzz to link libFuzzer.
+# It's empty for AFL++ builds, so this works for both modes.
 AM_LDFLAGS = \
 	$(CODE_COVERAGE_LIBS) \
 	$(JANSSON_LIBS) \
 	$(SODIUM_LIBS) \
 	$(LIBUUID_LIBS) \
 	$(MUNGE_LIBS) \
+	$(LIB_FUZZING_ENGINE) \
 	-no-install
 
 AM_CPPFLAGS = \

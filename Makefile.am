@@ -25,6 +25,16 @@ CODE_COVERAGE_IGNORE_PATTERN = \
 CODE_COVERAGE_LCOV_OPTIONS =
 @CODE_COVERAGE_RULES@
 
+# Build only the fuzzers and their dependencies
+# Useful for ClusterFuzzLite/OSS-Fuzz builds where we don't need the full project
+.PHONY: fuzzers
+fuzzers:
+	$(MAKE) -C src/libutil
+	$(MAKE) -C src/libtomlc99
+	$(MAKE) -C src/libca
+	$(MAKE) -C src/lib
+	$(MAKE) -C src/fuzz
+
 deb: debian scripts/debbuild.sh
 	@$(top_srcdir)/scripts/debbuild.sh $(abs_top_srcdir)
 
