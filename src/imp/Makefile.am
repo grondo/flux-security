@@ -79,7 +79,8 @@ imp_ldadd = \
 #  pattern to be overridden for in-tree testing purposes.
 #
 fluxlibexec_PROGRAMS = \
-	inst/flux-imp
+	inst/flux-imp \
+	cgroup-device-apply
 noinst_PROGRAMS = \
 	flux-imp
 
@@ -110,6 +111,11 @@ nodist_inst_flux_imp_SOURCES = \
 	config.c
 
 inst_flux_imp_LDADD = $(imp_ldadd)
+
+cgroup_device_apply_SOURCES = \
+	cgroup-device-apply.c
+cgroup_device_apply_CPPFLAGS = $(AM_CPPFLAGS) $(JANSSON_CFLAGS)
+cgroup_device_apply_LDADD = $(imp_ldadd) $(JANSSON_LIBS)
 
 BUILT_SOURCES = \
 	config.c \
