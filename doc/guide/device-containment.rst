@@ -208,3 +208,31 @@ References
 .. [6] flux-framework contributors, :doc:`rfc:spec_38`, flux-rfc.
 
 .. [7] flux-framework contributors, :doc:`rfc:spec_15`, flux-rfc.
+
+**************************
+External Containment Helper
+**************************
+
+The BPF device containment machinery is also exposed as a standalone
+helper, :man8:`cgroup-device-apply`, for use cases where device policy
+must be applied outside the IMP exec flow.
+
+The primary use case is external scripts like prolog and housekeeping,
+which may want to apply the same device policy and allowed devices set
+to the cgroup slice associated with the job user.
+
+The helper reads the same ``DevicePolicy`` / ``DeviceAllow`` JSON format
+as the IMP and applies identical baseline device handling, so device
+policy is enforced consistently whether a job is contained by the IMP
+directly or by the helper on behalf of a slice.
+
+Usage::
+
+    cgroup-device-apply CGROUP_PATH
+
+The JSON object is supplied on standard input, for example::
+
+    echo '{"DevicePolicy":"closed","DeviceAllow":[["/dev/nvidia0","rw"]]}' |
+        cgroup-device-apply /sys/fs/cgroup/user.slice/user-1000.slice
+
+See :man8:`cgroup-device-apply` for full documentation.

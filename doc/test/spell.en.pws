@@ -594,3 +594,9 @@ xffff
 ing
 nvidia
 pts
+CPUs
+sdexec
+nvidiactl
+ptmx
+urandom
+SYS
