@@ -10,37 +10,17 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	-I$(top_builddir) \
 	-I$(top_srcdir)/src
-#
-#  Create two versions of flux-imp, one that will be used for testing
-#   flux-imp, and one that will be installed inst/flux-imp.
-#  The only difference is that the test version allows configuration
-#   pattern to be overridden for in-tree testing purposes.
-#
-fluxlibexec_PROGRAMS = \
-	inst/flux-imp
-noinst_PROGRAMS = \
-	flux-imp
-
-flux_imp_LDADD = \
-	$(top_builddir)/src/lib/libflux-security.la \
-	$(top_builddir)/src/libca/libca.la \
-	$(top_builddir)/src/libutil/libutil.la \
-	$(top_builddir)/src/libtomlc99/libtomlc99.la \
-	$(PAM_LIBS)
 
 #
-#  Build the test-only version of flux-imp with -static, which seems
-#   to cause libtool to avoid creating a wrapper script (libtool's
-#   wrapper script is not compatible with setuid flux-imp tests). However,
-#   this embeds the builddir path to libflux-security into the DT_RUNPATH
-#   of the resulting executable, so DO NOT use this for the installed
-#   copy of the IMP (inst/flux-imp):
+#  noinst convenience library containing all IMP support code.
+#  imp.c (main) and the per-executable testconfig.c / config.c remain
+#  outside the library. Compiled once and linked into both flux-imp
+#  variants.
 #
-flux_imp_LDFLAGS = \
-	-static
+noinst_LTLIBRARIES = \
+	libimp.la
 
-IMP_SOURCES = \
-	imp.c \
+libimp_la_SOURCES = \
 	imp_state.h \
 	imp_log.h \
 	imp_log.c \
@@ -74,26 +54,62 @@ IMP_SOURCES = \
 	exec/device.c
 
 if HAVE_PAM
-IMP_SOURCES += \
+libimp_la_SOURCES += \
 	exec/pam.h \
 	exec/pam.c
 endif
 
+libimp_la_CPPFLAGS = $(AM_CPPFLAGS) $(JANSSON_CFLAGS)
+
+#
+#  Common LDADD for both flux-imp variants.
+#
+imp_ldadd = \
+	libimp.la \
+	$(top_builddir)/src/lib/libflux-security.la \
+	$(top_builddir)/src/libca/libca.la \
+	$(top_builddir)/src/libutil/libutil.la \
+	$(top_builddir)/src/libtomlc99/libtomlc99.la \
+	$(PAM_LIBS)
+
+#
+#  Create two versions of flux-imp, one that will be used for testing
+#  flux-imp, and one that will be installed as inst/flux-imp.
+#  The only difference is that the test version allows configuration
+#  pattern to be overridden for in-tree testing purposes.
+#
+fluxlibexec_PROGRAMS = \
+	inst/flux-imp
+noinst_PROGRAMS = \
+	flux-imp
+
+#
+#  Build the test-only version of flux-imp with -static, which seems
+#   to cause libtool to avoid creating a wrapper script (libtool's
+#   wrapper script is not compatible with setuid flux-imp tests). However,
+#   this embeds the builddir path to libflux-security into the DT_RUNPATH
+#   of the resulting executable, so DO NOT use this for the installed
+#   copy of the IMP (inst/flux-imp):
+#
 flux_imp_SOURCES = \
 	testconfig.c \
-	$(IMP_SOURCES)
+	imp.c
 
 nodist_flux_imp_SOURCES = \
 	testconfig.h
 
+flux_imp_LDADD = $(imp_ldadd)
+
+flux_imp_LDFLAGS = \
+	-static
+
 inst_flux_imp_SOURCES = \
-	$(IMP_SOURCES)
+	imp.c
 
 nodist_inst_flux_imp_SOURCES = \
 	config.c
 
-inst_flux_imp_LDADD = \
-	$(flux_imp_LDADD)
+inst_flux_imp_LDADD = $(imp_ldadd)
 
 BUILT_SOURCES = \
 	config.c \
