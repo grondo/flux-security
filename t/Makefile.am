@@ -23,7 +23,8 @@ TESTSCRIPTS = \
 	t2000-imp-exec.t \
 	t2002-imp-run.t \
 	t2003-imp-exec-pam.t \
-	t2004-imp-exec-device.t
+	t2004-imp-exec-device.t \
+	t2005-cgroup-device-apply.t
 
 TESTS = \
 	$(TESTSCRIPTS)
