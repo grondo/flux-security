@@ -11,6 +11,9 @@
 #ifndef HAVE_IMP_CGROUP_H
 #define HAVE_IMP_CGROUP_H 1
 
+#include <limits.h>
+#include <stdbool.h>
+
 struct cgroup_info {
     char mount_dir[PATH_MAX + 1];
     char path[PATH_MAX + 1];
