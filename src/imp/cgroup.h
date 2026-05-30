@@ -20,6 +20,13 @@ struct cgroup_info {
 
 struct cgroup_info *cgroup_info_create (void);
 
+/* Create a cgroup_info for an externally-supplied path without
+ * auto-detection from /proc/self/cgroup.  path must be absolute and
+ * begin with "/sys/fs/cgroup/".
+ * Returns NULL with errno set on error.
+ */
+struct cgroup_info *cgroup_info_from_path (const char *path);
+
 void cgroup_info_destroy (struct cgroup_info *cgroup);
 
 /*  Send signal to all pids (excluding the current pid) in the

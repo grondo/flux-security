@@ -180,6 +180,26 @@ void cgroup_info_destroy (struct cgroup_info *cg)
     }
 }
 
+struct cgroup_info *cgroup_info_from_path (const char *path)
+{
+    struct cgroup_info *cgroup;
+
+    if (!path || path[0] != '/'
+        || strncmp (path, "/sys/fs/cgroup/", 15) != 0) {
+        errno = EINVAL;
+        return NULL;
+    }
+    if (!(cgroup = calloc (1, sizeof (*cgroup))))
+        return NULL;
+    if (strlcpy (cgroup->path, path, sizeof (cgroup->path))
+        >= sizeof (cgroup->path)) {
+        free (cgroup);
+        errno = ENAMETOOLONG;
+        return NULL;
+    }
+    return cgroup;
+}
+
 struct cgroup_info *cgroup_info_create (void)
 {
     struct cgroup_info *cgroup = calloc (1, sizeof (*cgroup));
