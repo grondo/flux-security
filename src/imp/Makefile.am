@@ -162,7 +162,8 @@ TESTS = \
 	test_passwd.t \
 	test_pidinfo.t \
 	test_safe_popen.t \
-	test_device.t
+	test_device.t \
+	test_cgroup.t
 
 check_PROGRAMS = \
 	$(TESTS)
@@ -231,3 +232,11 @@ test_device_t_SOURCES = \
 	imp_log.h
 test_device_t_CPPFLAGS = $(AM_CPPFLAGS) $(JANSSON_CFLAGS)
 test_device_t_LDADD = $(test_ldadd) $(JANSSON_LIBS)
+
+test_cgroup_t_SOURCES = \
+	test/cgroup.c \
+	cgroup.c \
+	cgroup.h \
+	imp_log.c \
+	imp_log.h
+test_cgroup_t_LDADD = $(test_ldadd)
